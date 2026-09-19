@@ -17,6 +17,11 @@ def init_db():
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS calc_runs(
         id INTEGER PRIMARY KEY, kind TEXT, input_json TEXT, result_json TEXT, created_at TEXT);
+    CREATE TABLE IF NOT EXISTS edge_disruptions(
+        id INTEGER PRIMARY KEY, a TEXT, b TEXT, reason TEXT,
+        active INTEGER, created_at TEXT, released_at TEXT);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_edge_disruptions_active
+        ON edge_disruptions(a,b) WHERE active=1;
     """
     )
     if conn.execute("SELECT COUNT(*) c FROM stations").fetchone()["c"] == 0:

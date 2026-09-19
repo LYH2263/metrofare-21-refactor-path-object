@@ -1,5 +1,6 @@
 from app.db import connect
 from app.engines.route_quote import quote_route
+from app.repositories import disruptions as disruptions_repo
 from app.repositories import edges as edges_repo
 from app.repositories import fare_rules as rules_repo
 from app.repositories import runs as runs_repo
@@ -38,11 +39,29 @@ class MetroService:
     def quote(self, start: str, end: str, persist: bool):
         edges = edges_repo.list_pairs(self._conn)
         rules = rules_repo.as_calc_rules(self._conn)
-        result = quote_route(edges, start, end, rules)
+        active = disruptions_repo.list_active(self._conn)
+        result = quote_route(
+            edges, start, end, rules,
+            blocked_edges=[(d["a"], d["b"]) for d in active],
+        )
+        # 途经站与站数均来自引擎返回的路径对象，这里不再扫邻接表重数；
+        # 只把已查出的中断原因并回被点名的中断边。
+        reasons = {(d["a"], d["b"]): d["reason"] for d in active}
+        for b in result["blocked_edges"]:
+            b["reason"] = reasons.get((b["a"], b["b"]), "")
         run_id = None
         if persist and result.get("reachable"):
             run_id = runs_repo.insert(self._conn, "quote", {"start": start, "end": end}, result)
         return {"run_id": run_id, **result}
+
+    def disruptions(self):
+        return disruptions_repo.list_all(self._conn)
+
+    def create_disruption(self, a: str, b: str, reason: str):
+        return disruptions_repo.create(self._conn, a, b, reason)
+
+    def release_disruption(self, disruption_id: int):
+        return disruptions_repo.release(self._conn, disruption_id)
 
     def history(self, limit=50):
         return runs_repo.list_recent(self._conn, limit)
